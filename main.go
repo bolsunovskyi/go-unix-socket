@@ -5,9 +5,19 @@ import (
 	"net"
 	"os"
 	"os/signal"
+
+	"github.com/jgarff/rpi_ws281x/golang/ws2811"
+
+	"strconv"
 )
 
 var clients map[int]net.Conn
+
+const (
+	pin        = 18
+	count      = 16
+	brightness = 255
+)
 
 func socketHandler(fd net.Conn, clientN int) {
 	for {
@@ -20,8 +30,15 @@ func socketHandler(fd net.Conn, clientN int) {
 			return
 		}
 
-		data := buf[0:n]
-		log.Println(string(data))
+		data := string(buf[0:n])
+		log.Println(data)
+		udata, err := strconv.ParseUint(data, 10, 32)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		colorWipe(uint32(udata))
 	}
 }
 
@@ -39,6 +56,11 @@ func listenForClients(l net.Listener) {
 }
 
 func main() {
+	defer ws2811.Fini()
+	if err := ws2811.Init(pin, count, brightness); err != nil {
+		log.Fatalln(err)
+	}
+
 	clients = make(map[int]net.Conn)
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
@@ -63,4 +85,17 @@ func main() {
 	}
 	os.Exit(0)
 
+}
+
+func colorWipe(color uint32) error {
+	for i := 0; i < count; i++ {
+		ws2811.SetLed(i, color)
+		err := ws2811.Render()
+		if err != nil {
+			ws2811.Clear()
+			return err
+		}
+	}
+
+	return nil
 }
